@@ -1,0 +1,144 @@
+---
+title: "Homework 10"
+author:
+- Isaiah Benny
+- "EID: ieb357"
+date: "2024-04-25"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r global_options, echo=FALSE}
+knitr::opts_chunk$set(fig.height=3, fig.width=5, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60), echo = FALSE, message = FALSE, fig.align = 'center')
+```
+
+```{r}
+library(tidyverse)
+library(mosaic)
+library(moderndive)
+library(effectsize)
+library(knitr)
+library(stringr)
+```
+
+
+# [Github](https://github.com/isaiahbenny/SDS315-HW10)
+
+---
+
+# Problem 1
+
+```{r}
+redline <- read.csv("redlining.csv")
+
+lm_redline <- lm(policies ~ minority + fire + age + income, data=redline)
+```
+
+## Question
+
+The question that we are trying to answer is whether insurance companies in Chicago in the 1970s were redlining.
+
+## Approach
+
+To answer this question, I will create a linear regression model to determine if the amount of minorities in a ZIP code is associated with the number of FAIR policies, adjusting for rates of fire, the proportion of old houses, and median income.
+
+## Results
+
+```{r}
+get_regression_table(lm_redline) %>% kable()
+```
+
+The table above displays the estimates of the linear model along with the confidence intervals for each coefficient.
+
+## Conclusion
+
+We can conclude that an increase in the percentage of minorities in a ZIP code during this time likely has a positive effect on the number of FAIR plan policies and renewals when keeping fire rates, age, and median income constant. This is because the 95% confidence interval for the minority term contains only positive values. Since the individual effect of an increase in the percentage of minorities is an increase in FAIR policies, this provides some evidence that private insurance policies during this time had denied service on the basis of race (redlining), because we have assumed that more FAIR policies implies a lack of access to the private insurance market. However, this evidence is not definitive, as there could be other impactful confounders we have not adjusted for.
+
+\newpage
+
+# Problem 2
+
+## Part A
+```{r}
+groceries <- read.csv("groceries.csv")
+
+# Mean prices for each store
+mean_prices <- groceries %>% group_by(Store) %>% summarise(mean_price = mean(Price))
+
+ggplot(mean_prices) + geom_col(aes(y=Store, x=mean_price)) + xlab("Average Price of Products Sold")
+```
+
+This plot shows the average price of the products sold for each store in the dataset.
+
+## Part B
+```{r, fig.height=11, fig.width=9}
+# Number of stores that sell each product
+products <- groceries %>% group_by(Product) %>% summarize(n = n())
+
+# Plot in descending order
+ggplot(products) + geom_col(aes(y=fct_reorder(Product, n), x=n)) + xlab("Number of Stores Selling Product") + ylab("Product")
+```
+
+This plot shows each product in the dataset and the number of stores that sell that product.
+
+### Part C
+```{r}
+
+lm_groceries1 <- lm(Price ~ Type + Product, data=groceries)
+
+# Convenience is in intercept
+lm_table <- get_regression_table(lm_groceries1)
+
+# To get convenience - grocery instead of grocery - convenience we multiply the confint by -1
+upper <- (lm_table[lm_table$term == "Type: Grocery", 6] * -1) %>% as.numeric() %>% round(2)
+
+lower<- (lm_table[lm_table$term == "Type: Grocery", 7] * -1) %>% as.numeric() %>% round(2)
+
+```
+
+Compared with ordinary grocery stores (like Albertsons, HEB, or Krogers), convenience stores charge somewhere between `r lower` and `r upper` dollars more for the same product.
+
+## Part D
+```{r}
+lm_groceries2 <- lm(Price ~ Store + Product, data=groceries)
+
+# Get the store prices relative to the baseline (Albertsons)
+store_prices <- get_regression_table(lm_groceries2) %>% filter(str_detect(term, pattern="Store")) %>% arrange(desc(estimate))
+
+# store_prices is in descending order so we can get the lowest prices in the last two rows
+lowest_prices <- store_prices %>% slice((nrow(store_prices)-1) :nrow(store_prices)) %>% select(term)
+lowest_prices <- lowest_prices[['term']] %>% str_replace("Store: ", "")
+
+# First two rows have the highest prices
+highest_prices <- store_prices %>% slice(1:2) %>% select(term)
+highest_prices <- highest_prices[['term']] %>% str_replace("Store: ", "")
+```
+
+The two stores that seem to charge the lowest prices when comparing the same product are `r lowest_prices[1]` and `r lowest_prices[2]`. The two stores that appear to charge the highest prices when comparing the same product are `r highest_prices[1]` and `r highest_prices[2]`.
+
+
+## Part E
+```{r}
+# Store coefficients
+get_regression_table(lm_groceries2) %>% filter(str_detect(term, pattern="Store:")) %>% kable()
+```
+
+The table above shows the coefficients for the store variables in the linear model from part D. Using this table, is appears as if Central Market charges a similar amount to HEB for the same product. This is because the difference between the estimates of these variables is `r -0.573 - -0.646`, which is relatively small when comparing the differences between Central Market and HEB with other stores in the model.
+
+## Part F
+```{r}
+groceries <- mutate(groceries, Income10k = Income / 10000)
+
+lm_groceries3 <- lm(Price ~ Income10k + Product, data=groceries)
+
+income_table <- get_regression_table(lm_groceries3)
+
+# Get standardized coefficient for income10k
+income10k_standardized <- standardize_parameters(lm_groceries3) %>% data.frame()
+income10k_standardized <- income10k_standardized[income10k_standardized$Parameter=="Income10k", 2] %>% round(3)
+```
+
+The Income10k coefficient has a coefficient of `r income_table[income_table$term == "Income10k", 2] %>% as.numeric()`, which is negative. This means that if we hold the product constant, as income increases, price decreases. Thus, consumers in poorer ZIP codes seem to pay more for the same product on average compared to consumers in richer ZIP codes.
+
+A one-standard deviation increase in the income of a ZIP code seems to be associated with a `r income10k_standardized` standard-deviation change in the price that consumers in that ZIP code expect to pay for the same product.
